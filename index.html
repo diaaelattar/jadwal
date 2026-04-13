@@ -16,7 +16,8 @@
 html,body{height:100%;font-family:'Cairo',sans-serif;background:#f1f5f9;color:#1e293b}
 body{padding-bottom:70px}
 .screen{display:none;min-height:100vh}.screen.active{display:block}
-#scr-setup{background:linear-gradient(135deg,#14532d 0%,#166534 50%,#0f766e 100%);display:flex;align-items:center;justify-content:center;padding:20px}
+#scr-setup{background:linear-gradient(135deg,#14532d 0%,#166534 50%,#0f766e 100%);align-items:center;justify-content:center;padding:20px}
+#scr-setup.active{display:flex}
 .setup-card{background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .setup-logo{text-align:center;font-size:44px;margin-bottom:4px}
 .setup-title{text-align:center;font-size:18px;font-weight:900;color:var(--g);margin-bottom:2px}
@@ -35,11 +36,11 @@ body{padding-bottom:70px}
 .btn-rd{background:#fee2e2;color:var(--rd)}
 .progress-dots{display:flex;justify-content:center;gap:7px;margin-bottom:18px}
 .dot{width:8px;height:8px;border-radius:50%;background:#e2e8f0;transition:background .2s}.dot.active{background:var(--g2)}
-#scr-loading{background:var(--g);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:100vh}
+#scr-loading{background:var(--g);flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:100vh}
+#scr-loading.active{display:flex}
 .spin{width:42px;height:42px;border:4px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .ld-txt{color:#fff;font-size:14px;font-weight:700}
-#scr-app{display:block}
 .topbar{background:#fff;border-bottom:2px solid var(--g2);padding:9px 12px;box-shadow:0 2px 8px rgba(0,0,0,.05);position:sticky;top:0;z-index:80}
 .topbar-inner{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .app-brand{display:flex;align-items:center;gap:8px}
@@ -242,6 +243,7 @@ body{padding-bottom:70px}
         <span id="sync-badge" class="badge badge-g" style="display:none">🔄 متزامن</span>
         <span id="version-badge" class="badge badge-b" style="display:none"></span>
         <button id="admin-btn" class="ibtn" style="background:var(--g2);color:#fff;display:none" onclick="openAdminPanel()">🔧 المشرف</button>
+        <button class="ibtn" style="background:var(--rd);color:#fff" onclick="resetApp()">🚪 خروج</button>
       </div>
     </div>
   </div>
@@ -446,7 +448,8 @@ const LS_KEYS = {
   ROLE: 'jdw_role_v5',
   CACHE: 'jdw_cache_v5',
   META: 'jdw_meta_v5',
-  ADMHASH: 'jdw_adm_v5'
+  ADMHASH: 'jdw_adm_v5',
+  SNAME: 'jdw_sname_v5'
 };
 
 let APP = { isAdmin: false, schoolId: null, schoolCode: '' };
@@ -525,12 +528,12 @@ async function supaRegisterSchool(name, passHash){
 }
 
 async function supaFindSchool(code){
-  const { data } = await sb.from('schools').select('*').eq('school_code', code.toUpperCase().trim()).single();
+  const { data, error } = await sb.from('schools').select('*').eq('school_code', code.toUpperCase().trim()).maybeSingle();
   return data;
 }
 
 async function supaLoadSchedule(schoolId){
-  const { data } = await sb.from('schedules').select('*').eq('school_id', schoolId).single();
+  const { data, error } = await sb.from('schedules').select('*').eq('school_id', schoolId).maybeSingle();
   return data;
 }
 
@@ -597,6 +600,7 @@ async function doRegisterSchool(){
     localStorage.setItem(LS_KEYS.CODE, school.school_code);
     localStorage.setItem(LS_KEYS.ROLE, 'admin');
     localStorage.setItem(LS_KEYS.ADMHASH, hash);
+    localStorage.setItem(LS_KEYS.SNAME, school.school_name);
     APP.schoolId = school.id;
     APP.schoolCode = school.school_code;
 
@@ -624,6 +628,7 @@ async function doConnectWithCode(){
     localStorage.setItem(LS_KEYS.SCHOOL_ID, school.id);
     localStorage.setItem(LS_KEYS.CODE, school.school_code);
     localStorage.setItem(LS_KEYS.ROLE, 'user');
+    localStorage.setItem(LS_KEYS.SNAME, school.school_name);
     APP.schoolId = school.id;
     APP.schoolCode = school.school_code;
 
@@ -690,9 +695,12 @@ function startPolling(){
         pendingDB = data.schedule_data;
         _pendingVer = data.version;
         showUpdateBanner('📢 تحديث جديد: '+(data.note||'تم تحديث الجدول'));
+        if('Notification' in window && Notification.permission === 'granted') {
+          new Notification('تحديث في الجدول!', { body: data.note || 'تم نشر جدول جديد من المشرف', icon: 'https://cdn-icons-png.flaticon.com/512/3750/3750244.png' });
+        }
       }
     } catch(e){}
-  }, 60000);
+  }, 30000);
 }
 
 function applyUpdate(){
@@ -732,6 +740,7 @@ function launchApp(empty){
   if(role==='admin') document.getElementById('admin-btn').style.display='inline-block';
 
   if(empty||!DB){
+    document.getElementById('top-school').textContent=localStorage.getItem(LS_KEYS.SNAME) || 'الجداول المدرسية';
     document.getElementById('active-title').textContent='لا يوجد جدول — انتظر رفع المشرف';
     document.getElementById('tbl-target').innerHTML='<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px">📭 سيتم عرض الجدول هنا عند رفعه من المشرف</div>';
     return;
@@ -742,7 +751,7 @@ function launchApp(empty){
 function initAppUI(){
   if(!DB) return;
   document.getElementById('ctrl-panel').style.display='block';
-  document.getElementById('top-school').textContent=DB.info?.school||'الجداول المدرسية';
+  document.getElementById('top-school').textContent=DB.info?.school || localStorage.getItem(LS_KEYS.SNAME) || 'الجداول المدرسية';
   fillSel('cls-sel',DB.classOrder,'-- اختر الفصل --');
   fillSel('tch-sel',DB.teacherOrder,'-- اختر المعلم --');
   const ds=document.getElementById('day-sel');
