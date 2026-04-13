@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#14532d">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="جداول مدرسية">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
 <link rel="manifest" href="manifest.json">
 <title>نظام الجداول المدرسية</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -146,7 +148,7 @@ body{padding-bottom:70px}
 <!-- ═══ SETUP SCREEN ═══ -->
 <div id="scr-setup" class="screen">
   <div class="setup-card">
-    <div class="setup-logo">📊</div>
+    <div class="setup-logo"><img src="icon.png" style="width:72px;height:72px;border-radius:18px;box-shadow:0 8px 24px rgba(0,0,0,0.12)" alt="Logo"></div>
     <div class="setup-title">نظام الجداول المدرسية</div>
     <div class="setup-sub">إعداد سريع — مرة واحدة فقط</div>
     <div class="progress-dots">
@@ -165,6 +167,9 @@ body{padding-bottom:70px}
       <button class="btn btn-sl" onclick="goStep('step-1-admin'); setDot(1)">
         🏢 تسجيل مدرسة جديدة (للمشرف لأول مرة)
       </button>
+      <div style="margin-top:24px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #f1f5f9;padding-top:12px">
+        للتواصل والدعم الفني: <strong style="color:var(--g2)" dir="ltr">01118209309</strong> (واتساب)
+      </div>
     </div>
 
     <!-- الخطوة 1: تسجيل مدرسة جديدة (للأدمن) -->
@@ -409,6 +414,9 @@ body{padding-bottom:70px}
           <button onclick="resetApp()" class="btn btn-rd" style="font-size:12px;padding:7px">حذف البيانات وإعادة الإعداد</button>
         </div>
         <button onclick="adminLogout()" class="btn btn-rd" style="margin-top:4px;font-size:12px;padding:8px">خروج من لوحة المشرف</button>
+        <div style="margin-top:16px;text-align:center;font-size:11px;color:#94a3b8">
+          للتواصل والدعم الفني: <strong style="color:var(--g2)" dir="ltr">01118209309</strong> (واتساب)
+        </div>
       </div>
     </div>
   </div>
