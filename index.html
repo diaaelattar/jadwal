@@ -157,12 +157,13 @@ body{padding-bottom:70px}
 
     <!-- الخطوة 0: نوع المستخدم -->
     <div class="setup-step active" id="step-0">
-      <p style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:14px;text-align:center">كيف ستستخدم التطبيق؟</p>
-      <button class="btn btn-g" style="margin-bottom:10px" onclick="chooseRole('admin')">
-        🔧 أنا مسؤول الجدول (أُعدّ التطبيق للمدرسة)
+      <p style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:14px;text-align:center">مرحباً بك في نظام الجداول</p>
+      <button class="btn btn-g" style="margin-bottom:10px" onclick="goStep('step-1-user'); setDot(1)">
+        🚪 الدخول لمدرسة موجودة (بواسطة رمز الربط)
       </button>
-      <button class="btn btn-sl" onclick="chooseRole('user')">
-        👨‍🏫 أنا معلم / عضو هيئة تدريس
+      <div style="text-align:center;margin:12px 0;color:var(--sl);font-size:11px;font-weight:700">أو للمدارس الجديدة فقط</div>
+      <button class="btn btn-sl" onclick="goStep('step-1-admin'); setDot(1)">
+        🏢 تسجيل مدرسة جديدة (للمشرف لأول مرة)
       </button>
     </div>
 
@@ -242,8 +243,8 @@ body{padding-bottom:70px}
       <div class="topbar-actions">
         <span id="sync-badge" class="badge badge-g" style="display:none">🔄 متزامن</span>
         <span id="version-badge" class="badge badge-b" style="display:none"></span>
-        <button id="admin-btn" class="ibtn" style="background:var(--g2);color:#fff;display:none" onclick="openAdminPanel()">🔧 المشرف</button>
-        <button class="ibtn" style="background:var(--rd);color:#fff" onclick="resetApp()">🚪 خروج</button>
+        <button id="admin-btn" class="ibtn" style="background:var(--g2);color:#fff" onclick="openAdminPanel()">🔧 الإدارة</button>
+        <button class="ibtn" style="background:var(--rd);color:#fff" onclick="resetApp()">🚪 تبديل</button>
       </div>
     </div>
   </div>
@@ -571,11 +572,6 @@ async function supaLoadHistory(schoolId){
 // ════════════════════════════════════════════
 // SETUP FLOW
 // ════════════════════════════════════════════
-function chooseRole(role){
-  localStorage.setItem(LS_KEYS.ROLE, role);
-  goStep(role==='admin'?'step-1-admin':'step-1-user');
-  setDot(1);
-}
 function goStep(id){
   document.querySelectorAll('.setup-step').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -735,9 +731,7 @@ function updateVersionBadge(ver){
 // ════════════════════════════════════════════
 function launchApp(empty){
   showScreen('scr-app');
-  // Show admin button only for admin role
-  const role = localStorage.getItem(LS_KEYS.ROLE);
-  if(role==='admin') document.getElementById('admin-btn').style.display='inline-block';
+  APP.isAdmin = localStorage.getItem(LS_KEYS.ROLE) === 'admin';
 
   if(empty||!DB){
     document.getElementById('top-school').textContent=localStorage.getItem(LS_KEYS.SNAME) || 'الجداول المدرسية';
@@ -963,12 +957,13 @@ async function adminLogin(){
   // Try local hash first, then fetch from server
   let storedHash=localStorage.getItem(LS_KEYS.ADMHASH);
   if(!storedHash && sb && APP.schoolId){
-    const { data } = await sb.from('schools').select('admin_hash').eq('id', APP.schoolId).single();
+    const { data } = await sb.from('schools').select('admin_hash').eq('id', APP.schoolId).maybeSingle();
     if(data){ storedHash=data.admin_hash; localStorage.setItem(LS_KEYS.ADMHASH, storedHash); }
   }
 
   if(hash===storedHash){
     APP.isAdmin=true;
+    localStorage.setItem(LS_KEYS.ROLE, 'admin');
     document.getElementById('adm-login').style.display='none';
     document.getElementById('adm-content').style.display='block';
     document.getElementById('adm-login-err').style.display='none';
@@ -979,6 +974,7 @@ async function adminLogin(){
 
 function adminLogout(){
   APP.isAdmin=false;
+  localStorage.setItem(LS_KEYS.ROLE, 'user');
   document.getElementById('adm-login').style.display='block';
   document.getElementById('adm-content').style.display='none';
   document.getElementById('adm-pass').value='';
