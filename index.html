@@ -477,9 +477,12 @@ body{padding-bottom:70px}
 <div id="absence-panel-ovl" class="absence-panel-ovl">
   <div class="absence-panel-card">
     <div class="abs-header">
-      <div>
-        <h2>🟡 توزيع حصص المعلمين الغائبين</h2>
-        <div class="abs-header-info" id="abs-header-date">اليوم: —</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div>
+          <h2>🟡 توزيع حصص المعلمين الغائبين</h2>
+          <div class="abs-header-info" id="abs-header-date">اليوم: —</div>
+        </div>
+        <button onclick="openAbsSettings()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:16px" title="إعدادات التوزيع">⚙️</button>
       </div>
       <button onclick="closeAbsencePanel()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:4px 10px;cursor:pointer;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700">✕ إغلاق</button>
     </div>
@@ -609,6 +612,29 @@ body{padding-bottom:70px}
   </div>
 </div>
 
+<div class="ovl" id="abs-settings-ovl" onclick="if(event.target===this)closeOvl('abs-settings-ovl')">
+  <div class="sh"><div class="shh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px">
+      <h3 class="sh-title" style="margin:0">⚙️ إعدادات التوزيع الذكي</h3>
+      <button class="sh-close" onclick="closeOvl('abs-settings-ovl')">×</button>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">معيار التوزيع المفضل</div>
+      <select class="inp" id="abs-criteria-sel" onchange="updateAbsSettings()">
+        <option value="balanced">⚖️ متوازن (الأقل حملاً الأسبوعي)</option>
+        <option value="specialist">🎓 تخصصي (الأولوية لمدرس المادة)</option>
+      </select>
+    </div>
+    <div class="adm-section">
+      <div class="adm-section-title">المعلمون المستبعدون (تجنب دائماً)</div>
+      <div id="abs-excluded-list" style="max-height:35vh;overflow-y:auto;border:1px solid #e2e8f0;border-radius:10px;padding:5px">
+        <!-- filled by JS -->
+      </div>
+    </div>
+    <button class="btn btn-g" onclick="closeOvl('abs-settings-ovl')">حفظ وإغلاق</button>
+  </div>
+</div>
+
 <script>
 // ════════════════════════════════════════════
 // ⚠️ إعدادات Supabase
@@ -622,7 +648,7 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const LS_KEYS = {
   SCHOOL_ID:'jdw_sid_v5', CODE:'jdw_code_v5', ROLE:'jdw_role_v5',
   CACHE:'jdw_cache_v5', META:'jdw_meta_v5', ADMHASH:'jdw_adm_v5', SNAME:'jdw_sname_v5',
-  ABSENCE:'jdw_absence_v5'
+  ABSENCE:'jdw_absence_v5', ABS_SETTINGS:'jdw_abs_settings_v5'
 };
 
 let APP = { isAdmin:false, schoolId:null, schoolCode:'' };
@@ -641,8 +667,13 @@ let absState = {
   dayIdx: 0,         // 0=Sun, 1=Mon, ...
   date: '',          // 'YYYY-MM-DD'
   absentIds: [],     // teacher IDs
-  assignments: [],   // [{periodId, periodName, classId, className, origId, origName, subId, subName, locked, allSubs}]
+  assignments: [],   // [{periodId, periodName, classId, className, origId, origName, subId, subName, locked, forced, fatigue}]
   filterMode: 'all'
+};
+
+let absSettings = {
+  excludedIds: [],
+  criteria: 'balanced' // 'balanced' | 'specialist'
 };
 
 // ════════════════════════════════════════════
@@ -1104,8 +1135,87 @@ function absSelectDay(idx,btn){
   updateAbsHeader();
   // Reset assignments when day changes
   absState.assignments=[];
+  loadAbsSettings();
   renderAbsAssignments();
   updateAbsStats();
+}
+
+function openAbsSettings(){
+  loadAbsSettings();
+  document.getElementById('abs-criteria-sel').value = absSettings.criteria;
+  renderExcludedTeachersList();
+  openOvl('abs-settings-ovl');
+}
+
+function renderExcludedTeachersList(){
+  const list = document.getElementById('abs-excluded-list');
+  if(!DB?.teacherOrder) return;
+  list.innerHTML = DB.teacherOrder.map(t => {
+    const isExcluded = absSettings.excludedIds.includes(t.id);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px;border-bottom:1px solid #f8fafc">
+      <input type="checkbox" id="ex-${t.id}" ${isExcluded?'checked':''} onchange="toggleExcludeTeacher('${t.id}', this.checked)">
+      <label for="ex-${t.id}" style="font-size:12px;flex:1;cursor:pointer">${xe(t.name)}</label>
+    </div>`;
+  }).join('');
+}
+
+function toggleExcludeTeacher(tid, checked){
+  if(checked){ if(!absSettings.excludedIds.includes(tid)) absSettings.excludedIds.push(tid); }
+  else { absSettings.excludedIds = absSettings.excludedIds.filter(id => id !== tid); }
+  saveAbsSettings();
+}
+
+function updateAbsSettings(){
+  absSettings.criteria = document.getElementById('abs-criteria-sel').value;
+  saveAbsSettings();
+}
+
+function saveAbsSettings(){
+  localStorage.setItem(LS_KEYS.ABS_SETTINGS, JSON.stringify(absSettings));
+}
+
+function loadAbsSettings(){
+  const raw = localStorage.getItem(LS_KEYS.ABS_SETTINGS);
+  if(raw) absSettings = JSON.parse(raw);
+}
+
+function getWeeklyExtraLoad(teacherId){
+  let total = 0;
+  const indexRaw = localStorage.getItem(LS_KEYS.ABSENCE + '_index');
+  if(!indexRaw) return 0;
+  const index = JSON.parse(indexRaw);
+  // We check only the current week if possible, but for simplicity we check all stored (last 30 days)
+  index.forEach(key => {
+    const raw = localStorage.getItem(key);
+    if(raw){
+      const data = JSON.parse(raw);
+      (data.assignments || []).forEach(a => {
+        if(a.subId === teacherId) total++;
+      });
+    }
+  });
+  return total;
+}
+
+function isTeacherFatigued(tid, dayMask, periodId){
+  // Check sequence: P-2, P-1, (Sub=P), P+1, P+2
+  // If ALL these 4 are busy, P is a fatigue point
+  const pIdx = DB.periods.findIndex(p => p.id === periodId);
+  if(pIdx === -1) return false;
+
+  const check = (idx) => {
+    if(idx < 0 || idx >= DB.periods.length) return false;
+    const pid = DB.periods[idx].id;
+    return DB.cards.some(c => c.days === dayMask && c.period === pid && DB.lessons[c.lesson]?.teachers.includes(tid));
+  };
+
+  const b1 = check(pIdx - 1);
+  const b2 = check(pIdx - 2);
+  const a1 = check(pIdx + 1);
+  const a2 = check(pIdx + 2);
+
+  // Fatigue if block of 5
+  return (b1 && b2 && a1 && a2);
 }
 
 function updateAbsHeader(){
@@ -1220,7 +1330,7 @@ function updateAbsGenBtn(){
 // ════════════════════════════════════════════
 // CORE ALGORITHM: Auto-generate assignments
 // ════════════════════════════════════════════
-function getFreeTeachersForPeriod(dayMask,periodId,absentIds,currentAssignments){
+function getFreeTeachersForPeriod(dayMask,periodId,absentIds,currentAssignments,origSubId){
   // Teachers busy in this period (have a card)
   const busyIds=new Set();
   DB.cards.forEach(c=>{
@@ -1228,13 +1338,45 @@ function getFreeTeachersForPeriod(dayMask,periodId,absentIds,currentAssignments)
       DB.lessons[c.lesson].teachers.forEach(t=>busyIds.add(t));
   });
 
-  // Count how many extra assignments each teacher already has today
-  const extraCount={};
-  currentAssignments.forEach(a=>{if(a.subId)extraCount[a.subId]=(extraCount[a.subId]||0)+1;});
+  // Load absSettings
+  loadAbsSettings();
 
-  return DB.teacherOrder
-    .filter(t=>!busyIds.has(t.id)&&!absentIds.includes(t.id))
-    .sort((a,b)=>(extraCount[a.id]||0)-(extraCount[b.id]||0));
+  const candidates = DB.teacherOrder.filter(t => {
+    // 1. Not busy now
+    if(busyIds.has(t.id)) return false;
+    // 2. Not absent
+    if(absentIds.includes(t.id)) return false;
+    // 3. Not in excluded list
+    if(absSettings.excludedIds.includes(t.id)) return false;
+    // 4. Not on FULL day off (has 0 basic lessons today)
+    const todayLessons = DB.cards.filter(c => c.days === dayMask && DB.lessons[c.lesson]?.teachers.includes(t.id)).length;
+    if(todayLessons === 0) return false;
+
+    return true;
+  });
+
+  return candidates.map(t => {
+    const weeklyLoad = getWeeklyExtraLoad(t.id);
+    const dayLoad = currentAssignments.filter(a => a.subId === t.id).length;
+    const isFatigued = isTeacherFatigued(t.id, dayMask, periodId);
+
+    // Specialist check: teach same subject?
+    const mySubs = Object.values(DB.lessons).filter(l => l.teachers.includes(t.id)).map(l => l.subject);
+    const isSpecialist = mySubs.includes(origSubId);
+
+    return { ...t, weeklyLoad, dayLoad, isFatigued, isSpecialist };
+  }).sort((a,b) => {
+    // Criteria sorting
+    if(absSettings.criteria === 'specialist'){
+      if(a.isSpecialist !== b.isSpecialist) return b.isSpecialist ? 1 : -1;
+    }
+
+    // Fatigue preference (non-fatigued first)
+    if(a.isFatigued !== b.isFatigued) return a.isFatigued ? 1 : -1;
+
+    // Load preference (least weekly load first)
+    return (a.weeklyLoad + a.dayLoad) - (b.weeklyLoad + b.dayLoad);
+  });
 }
 
 function generateAutoAssignments(){
@@ -1256,7 +1398,7 @@ function generateAutoAssignments(){
         if(exists) return;
 
         const period=DB.periods.find(p=>p.id===card.period);
-        const freeTeachers=getFreeTeachersForPeriod(dv,card.period,absState.absentIds,assignments);
+        const freeTeachers=getFreeTeachersForPeriod(dv,card.period,absState.absentIds,assignments,lesson.subject);
         const bestSub=freeTeachers[0]||null;
         const subject=DB.subjects[lesson.subject]||'—';
 
@@ -1268,10 +1410,13 @@ function generateAutoAssignments(){
           className:DB.classes[classId]||classId,
           origId:teacherId,
           origName:DB.teachers[teacherId]||teacherId,
+          origSubId:lesson.subject,
           subject,
           subId:bestSub?.id||null,
           subName:bestSub?.name||null,
           locked:false,
+          forced: bestSub ? bestSub.isFatigued : false,
+          fatigue: bestSub ? bestSub.isFatigued : false,
           allFree:freeTeachers
         });
       });
@@ -1325,12 +1470,15 @@ function renderAbsAssignments(){
     return true;
   });
 
+  // Sort by Teacher Name (subName)
+  filtered.sort((a,b) => (a.subName||'').localeCompare(b.subName||'','ar'));
+
   const tbody=document.getElementById('assign-tbody');
   tbody.innerHTML=filtered.map((a,i)=>{
     const realIdx=absState.assignments.indexOf(a);
     const dv=DV[absState.dayIdx];
     // Rebuild free list for this assignment (for dropdown)
-    const freeTeachers=a.allFree||getFreeTeachersForPeriod(dv,a.periodId,absState.absentIds,absState.assignments.filter((_,ii)=>ii!==realIdx));
+    const freeTeachers=a.allFree||getFreeTeachersForPeriod(dv,a.periodId,absState.absentIds,absState.assignments.filter((_,ii)=>ii!==realIdx),a.origSubId);
 
     // Include all teachers in dropdown (mark busy ones)
     const options=DB.teacherOrder.map(t=>{
@@ -1343,8 +1491,9 @@ function renderAbsAssignments(){
     const covered=!!a.subId;
     const rowClass=a.locked?'assign-row-locked':covered?'assign-covered':'assign-uncovered';
     const lockIcon=a.locked?'🔒':'🔓';
+    const fatigueIcon = a.forced ? '<span title="تم الإجبار لتجنب الإرهاق" style="cursor:help">⚠️</span> ' : '';
     const covBadge=covered
-      ?`<span class="assign-coverage-badge covered">✅ مغطاة</span>`
+      ?`<span class="assign-coverage-badge covered">${fatigueIcon}✅ مغطاة</span>`
       :`<span class="assign-coverage-badge uncovered">❌ غير مغطاة</span>`;
 
     return `<tr class="${rowClass}" id="arow-${realIdx}">
